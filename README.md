@@ -11,5 +11,5 @@ This project demonstrates a combination of obstacle avoidance and seek behavior 
 ## Setup
 To run this project, you'll need Python and Pygame installed. Clone the repository and run the script to see the behaviors in action.
 
-##Inspiration 
+## Inspiration 
 This project was inspired by the Steering Behavior Examples from [kidscancode](https://github.com/kidscancode/pygame_tutorials/tree/master/examples/steering), which illustrates basic steering concepts in Pygame. Special thanks to [Chris Bradfield] for the foundational ideas!
