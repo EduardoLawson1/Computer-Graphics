@@ -18,18 +18,15 @@ LIGHTGRAY = (140, 140, 140)
 # Propriedades do Mob
 MOB_SIZE = 16
 MAX_SPEED = 4
-MAX_FORCE = 0.15
+MAX_FORCE = 0.3
 WALL_LIMIT = 20
-LOOK_AHEAD = 20
+LOOK_AHEAD = 40
 APPROACH_RADIUS = 120
 
 class Wall(pg.sprite.Sprite):
-    def __init__(self, x=0, y=0, s=32):
+    def __init__(self, x, y, s=32):
         self.groups = all_sprites, walls
         pg.sprite.Sprite.__init__(self, self.groups)
-        if x == 0 and y == 0:
-            x = randint(0, (WIDTH / s) - 1)
-            y = randint(0, (HEIGHT / s) - 1)
         self.image = pg.Surface((s, s))
         self.image.fill(LIGHTGRAY)
         self.rect = self.image.get_rect()
@@ -39,15 +36,14 @@ class Wall(pg.sprite.Sprite):
     def draw_vectors(self):
         pg.draw.circle(screen, CYAN, self.rect.center, int(self.radius), 2)
 
-
 class Mob(pg.sprite.Sprite):
     def __init__(self):
-        self.groups = all_sprites
+        self.groups = all_sprites, mobs
         pg.sprite.Sprite.__init__(self, self.groups)
         self.image = pg.Surface((MOB_SIZE, MOB_SIZE))
         self.image.fill(YELLOW)
         self.rect = self.image.get_rect()
-        self.pos = vec(randint(0, WIDTH), randint(0, HEIGHT))
+        self.pos = vec(randint(0, WIDTH // 2 - 50), randint(0, HEIGHT))
         self.vel = vec(MAX_SPEED, 0).rotate(uniform(0, 360))
         self.acc = vec(0, 0)
         self.rect.center = self.pos
@@ -66,61 +62,80 @@ class Mob(pg.sprite.Sprite):
         return steer
 
     def avoid_obstacles(self, group):
-        dyn_length = LOOK_AHEAD * self.vel.length() / MAX_SPEED
-        ahead = self.pos + self.vel.normalize() * dyn_length
-        ahead2 = self.pos + self.vel.normalize() * dyn_length / 2
-        self.a = vec(ahead)
-        self.a2 = vec(ahead2)
-        most_threatening = self.find_most_threatening(group, ahead, ahead2)
-        if most_threatening:
-            steer = ahead - most_threatening.rect.center
-            steer.normalize_ip()
+        steer = vec(0, 0)
+        for wall in group:
+            dist = self.pos.distance_to(wall.rect.center)
+            if dist < wall.radius + self.rect.width / 2:
+                diff = self.pos - wall.rect.center
+                steer += diff.normalize() * (wall.radius + self.rect.width / 2 - dist)
+        if steer.length() > MAX_FORCE:
             steer.scale_to_length(MAX_FORCE)
-        else:
-            steer = vec(0, 0)
-        return steer
+        return steer * 2  # Aumentamos a força de evitação
 
-    def find_collision(self, obs, ahead, ahead2):
-        obs_center = vec(obs.rect.center)
-        d1 = obs_center.distance_to(ahead)
-        d2 = obs_center.distance_to(ahead2)
-        return (d1 <= obs.radius) or (d2 <= obs.radius)
+    def separation(self, mobs):
+        steering = vec(0, 0)
+        for mob in mobs:
+            if mob != self:
+                dist = self.pos.distance_to(mob.pos)
+                if dist < 50:
+                    diff = self.pos - mob.pos
+                    diff.normalize_ip()
+                    steering += diff / dist
+        if steering.length() > 0:
+            steering.scale_to_length(MAX_FORCE)
+        return steering
 
-    def find_most_threatening(self, group, ahead, ahead2):
-        most_threatening = None
-        for obs in group:
-            collide = self.find_collision(obs, ahead, ahead2)
-            if collide and (not most_threatening or self.pos.distance_to(obs.rect.center) < self.pos.distance_to(most_threatening.rect.center)):
-                most_threatening = obs
-        return most_threatening
+    def alignment(self, mobs):
+        steering = vec(0, 0)
+        for mob in mobs:
+            if mob != self:
+                steering += mob.vel
+        if len(mobs) > 1:
+            steering /= len(mobs) - 1
+            steering -= self.vel
+            if steering.length() > MAX_FORCE:
+                steering.scale_to_length(MAX_FORCE)
+        return steering
+
+    def cohesion(self, mobs):
+        center = vec(0, 0)
+        for mob in mobs:
+            if mob != self:
+                center += mob.pos
+        if len(mobs) > 1:
+            center /= len(mobs) - 1
+            return self.seek_with_approach(center)
+        return vec(0, 0)
 
     def update(self):
-        mouse_pos = pg.mouse.get_pos()
-        self.acc = self.seek_with_approach(mouse_pos) + self.avoid_obstacles(walls) * 2
+        seek_force = self.seek_with_approach(target_pos) * 0.5
+        avoid_force = self.avoid_obstacles(walls) * 1.5
+        sep_force = self.separation(mobs) * 1.5
+        ali_force = self.alignment(mobs) * 1.0
+        coh_force = self.cohesion(mobs) * 1.0
+        
+        self.acc = seek_force + avoid_force + sep_force + ali_force + coh_force
+        
         self.vel += self.acc
         if self.vel.length() > MAX_SPEED:
             self.vel.scale_to_length(MAX_SPEED)
         self.pos += self.vel
-        if self.pos.x > WIDTH:
-            self.pos.x = 0
-        if self.pos.x < 0:
-            self.pos.x = WIDTH
-        if self.pos.y > HEIGHT:
-            self.pos.y = 0
-        if self.pos.y < 0:
-            self.pos.y = HEIGHT
+        
+        # Colisão com as bordas da tela
+        if self.pos.x < 0 or self.pos.x > WIDTH:
+            self.vel.x *= -1
+        if self.pos.y < 0 or self.pos.y > HEIGHT:
+            self.vel.y *= -1
+        
+        self.pos.x = max(0, min(self.pos.x, WIDTH))
+        self.pos.y = max(0, min(self.pos.y, HEIGHT))
+        
         self.rect.center = self.pos
 
     def draw_vectors(self):
         scale = 25
         pg.draw.line(screen, GREEN, self.pos, (self.pos + self.vel * scale), 5)
         pg.draw.line(screen, RED, self.pos, (self.pos + self.acc * scale * 5), 5)
-        ax = int(self.a.x)
-        ay = int(self.a.y)
-        ax2 = int(self.a2.x)
-        ay2 = int(self.a2.y)
-        pg.draw.circle(screen, CYAN, (ax, ay), 5)
-        pg.draw.circle(screen, CYAN, (ax2, ay2), 5)
 
 # Inicialização do Pygame
 pg.init()
@@ -129,11 +144,24 @@ clock = pg.time.Clock()
 
 all_sprites = pg.sprite.Group()
 walls = pg.sprite.Group()
-Mob()
+mobs = pg.sprite.Group()
 
-# Criação de paredes
-for i in range(8):
-    Wall()
+# Criação de mobs
+for _ in range(20):  # Cria 20 Mobs
+    Mob()
+
+# Criação de paredes para formar um gargalo
+wall_width = 32
+gap_size = 3  # Tamanho do vão em unidades de parede
+gap_start = HEIGHT // 2 - (gap_size * wall_width) // 2
+gap_end = gap_start + gap_size * wall_width
+
+for y in range(0, HEIGHT, wall_width):
+    if y < gap_start or y >= gap_end:
+        Wall(WIDTH // 2 // wall_width, y // wall_width)
+
+# Definir o alvo fixo
+target_pos = vec(WIDTH - 100, HEIGHT // 2)
 
 paused = False
 show_vectors = False
@@ -153,14 +181,9 @@ while running:
             if event.key == pg.K_m:
                 Mob()
         if event.type == pg.MOUSEBUTTONDOWN:
-            mpos = pg.mouse.get_pos()
-            x = mpos[0] // 32
-            y = mpos[1] // 32
-            if event.button == 1:
-                Wall(x=x, y=y, s=32)
             if event.button == 3:
                 for sprite in all_sprites:
-                    if sprite.rect.collidepoint(mpos):
+                    if sprite.rect.collidepoint(event.pos):
                         sprite.kill()
 
     if not paused:
@@ -171,6 +194,10 @@ while running:
     if show_vectors:
         for sprite in all_sprites:
             sprite.draw_vectors()
+    
+    # Desenhar o alvo
+    pg.draw.circle(screen, RED, (int(target_pos.x), int(target_pos.y)), 10)
+    
     pg.display.flip()
 
 pg.quit()
