@@ -160,27 +160,34 @@ all_sprites = pg.sprite.Group()
 mobs = pg.sprite.Group()
 walls = pg.sprite.Group()
 
-# Criação da parede central com um pequeno vão
-wall_width =  32 #32
-gap_size = 3  #Tamanho do vão em unidades de parede
-gap_start = HEIGHT // 2 - (gap_size * wall_width) // 2
-gap_end = gap_start + gap_size * wall_width
+# Criação das linhas de paredes no topo e na parte inferior
+wall_width = 32
+half_width = WIDTH // 2
 
-for y in range(0, HEIGHT, wall_width):
-    if y < gap_start or y >= gap_end:
-        Wall(WIDTH // 2 // wall_width, y // wall_width)
+# Criação de duas linhas coladas no topo, começando da metade da largura
+for x in range(half_width // wall_width, WIDTH // wall_width):
+    Wall(x, 0)  # Primeira linha no topo
+    Wall(x, 1)  # Segunda linha no topo, colada à primeira
+
+# Criação de duas linhas coladas na parte inferior, começando da metade da largura
+for x in range(half_width // wall_width, WIDTH // wall_width):
+    Wall(x, (HEIGHT // wall_width) - 2)  # Primeira linha na parte inferior
+    Wall(x, (HEIGHT // wall_width) - 1)  # Segunda linha na parte inferior, colada à primeira
 
 # Criação de dois grupos de mobs
 group1_target = vec(WIDTH - 50, HEIGHT // 2)
 group2_target = vec(50, HEIGHT // 2)
 
-for _ in range(10):
+# Criação dos mobs
+for _ in range(30):
     Mob(randint(0, WIDTH // 4), randint(0, HEIGHT), YELLOW, group1_target, 1)
     Mob(randint(3 * WIDTH // 4, WIDTH), randint(0, HEIGHT), BLUE, group2_target, 2)
 
 paused = False
 show_vectors = False
 running = True
+
+# Loop principal do jogo
 while running:
     clock.tick(FPS)
     for event in pg.event.get():
@@ -196,9 +203,11 @@ while running:
 
     if not paused:
         all_sprites.update()
-    pg.display.set_caption("{:.2f}".format(clock.get_fps()))
+    
+    # Renderização
     screen.fill(DARKGRAY)
     all_sprites.draw(screen)
+    
     if show_vectors:
         for sprite in all_sprites:
             sprite.draw_vectors()
@@ -207,6 +216,8 @@ while running:
     pg.draw.circle(screen, RED, (int(group1_target.x), int(group1_target.y)), 10)
     pg.draw.circle(screen, RED, (int(group2_target.x), int(group2_target.y)), 10)
     
+    # Atualizar a tela
     pg.display.flip()
+    pg.display.set_caption(f"FPS: {clock.get_fps():.2f}")
 
-pg.quit()                                                                           
+pg.quit()
