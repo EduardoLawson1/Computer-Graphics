@@ -147,7 +147,7 @@ walls = pg.sprite.Group()
 mobs = pg.sprite.Group()
 
 # Criação de mobs
-for _ in range(300):  # Cria 20 Mobs
+for _ in range(200):  # Cria 200 Mobs
     Mob()
 
 # Criação das quatro linhas de paredes
